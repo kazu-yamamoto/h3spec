@@ -24,6 +24,9 @@ main = do
             ccServerName = host
           , ccPortName   = port
           , ccALPN       = makeProtos
+          , ccConfig     = defaultConfig {
+                confVersions = [Draft29,Draft32]
+                }
           }
     withArgs [] (H.runSpec (transportSpec cc) H.defaultConfig) >>= H.evaluateSummary
 
