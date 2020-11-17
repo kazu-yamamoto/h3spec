@@ -17,6 +17,7 @@ executable h3spec
   hs-source-dirs:       .
   main-is:              h3spec.hs
   other-modules:        Transport
+                        Paths_h3_spec
   ghc-options:          -Wall -threaded -rtsopts
   build-depends:        base >= 4.0 && < 5
                       , bytestring
