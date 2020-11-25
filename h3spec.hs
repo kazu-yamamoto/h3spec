@@ -18,14 +18,18 @@ import Transport
 import qualified Paths_h3_spec as P
 
 data Options = Options {
-    optVersion :: Bool
-  , optMatches :: [String]
+    optVersion    :: Bool
+  , optMatches    :: [String]
+  , optQLogDir    :: Maybe FilePath
+  , optKeyLogFile :: Maybe FilePath
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optVersion = False
-  , optMatches = []
+    optVersion    = False
+  , optMatches    = []
+  , optQLogDir    = Nothing
+  , optKeyLogFile = Nothing
   }
 
 options :: [OptDescr (Options -> Options)]
@@ -36,6 +40,12 @@ options = [
   , Option ['m'] ["match"]
     (ReqArg (\m o -> o { optMatches = m : optMatches o}) "<test case description>")
     "Select a test case"
+  , Option ['q'] ["qlog-dir"]
+    (ReqArg (\dir o -> o { optQLogDir = Just dir }) "<dir>")
+    "directory to store qlog"
+  , Option ['l'] ["key-log-file"]
+    (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
+    "a file to store negotiated secrets"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -65,7 +75,9 @@ main = do
           , ccALPN       = makeProtos
           , ccConfig     = defaultConfig {
                 confVersions = [Draft29,Draft32]
-                }
+              , confQLog       = optQLogDir opts
+              , confKeyLog     = getLogger $ optKeyLogFile opts
+              }
           }
         qcArgs
           | null (optMatches opts) = []
@@ -78,3 +90,7 @@ makeProtos ver = return $ Just [h3X,hqX]
     verbs = C8.pack $ show $ fromVersion ver
     h3X = "h3-" `BS.append` verbs
     hqX = "hq-" `BS.append` verbs
+
+getLogger :: Maybe FilePath -> (String -> IO ())
+getLogger Nothing     = \_ -> return ()
+getLogger (Just file) = \msg -> appendFile file (msg ++ "\n")
