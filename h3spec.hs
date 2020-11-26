@@ -19,6 +19,7 @@ import qualified Paths_h3_spec as P
 
 data Options = Options {
     optVersion    :: Bool
+  , optDebugLog   :: Bool
   , optMatches    :: [String]
   , optQLogDir    :: Maybe FilePath
   , optKeyLogFile :: Maybe FilePath
@@ -27,6 +28,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optVersion    = False
+  , optDebugLog   = False
   , optMatches    = []
   , optQLogDir    = Nothing
   , optKeyLogFile = Nothing
@@ -37,6 +39,9 @@ options = [
     Option ['v'] ["version"]
     (NoArg (\o -> o { optVersion = True }))
     "Print version"
+  , Option ['d'] ["debug"]
+    (NoArg (\o -> o { optDebugLog = True }))
+    "print debug info"
   , Option ['m'] ["match"]
     (ReqArg (\m o -> o { optMatches = m : optMatches o}) "<test case description>")
     "Select a test case"
@@ -73,6 +78,7 @@ main = do
             ccServerName = host
           , ccPortName   = port
           , ccALPN       = makeProtos
+          , ccDebugLog   = optDebugLog opts
           , ccConfig     = defaultConfig {
                 confVersions = [Draft29,Draft32]
               , confQLog       = optQLogDir opts
