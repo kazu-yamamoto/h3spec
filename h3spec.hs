@@ -80,7 +80,7 @@ main = do
           , ccALPN       = makeProtos
           , ccDebugLog   = optDebugLog opts
           , ccConfig     = defaultConfig {
-                confVersions = [Draft29,Draft32]
+                confVersions = [Version1,Draft29,Draft32]
               , confQLog       = optQLogDir opts
               , confKeyLog     = getLogger $ optKeyLogFile opts
               }
