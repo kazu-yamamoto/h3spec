@@ -91,7 +91,7 @@ main = do
     H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportSpec cc) >>= H.evaluateSummary
 
 makeProtos :: Version -> IO (Maybe [ByteString])
-makeProtos Version1 = return $ Just ["h3","hq"]
+makeProtos Version1 = return $ Just ["h3","hq-interop"]
 makeProtos ver = return $ Just [h3X,hqX]
   where
     verbs = C8.pack $ show $ fromVersion ver
