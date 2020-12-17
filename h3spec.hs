@@ -20,7 +20,7 @@ import qualified Paths_h3_spec as P
 data Options = Options {
     optVersion    :: Bool
   , optDebugLog   :: Bool
-  , optMatches    :: [String]
+  , optMatch      :: [String]
   , optQLogDir    :: Maybe FilePath
   , optKeyLogFile :: Maybe FilePath
   } deriving Show
@@ -29,7 +29,7 @@ defaultOptions :: Options
 defaultOptions = Options {
     optVersion    = False
   , optDebugLog   = False
-  , optMatches    = []
+  , optMatch      = []
   , optQLogDir    = Nothing
   , optKeyLogFile = Nothing
   }
@@ -43,7 +43,7 @@ options = [
     (NoArg (\o -> o { optDebugLog = True }))
     "print debug info"
   , Option ['m'] ["match"]
-    (ReqArg (\m o -> o { optMatches = m : optMatches o}) "<test case description>")
+    (ReqArg (\m o -> o { optMatch = m : optMatch o}) "<test case description>")
     "Select a test case"
   , Option ['q'] ["qlog-dir"]
     (ReqArg (\dir o -> o { optQLogDir = Just dir }) "<dir>")
@@ -86,8 +86,8 @@ main = do
               }
           }
         qcArgs
-          | null (optMatches opts) = []
-          | otherwise              = "--match" : (intersperse "--match" $ reverse $ optMatches opts)
+          | null (optMatch opts) = []
+          | otherwise            = "--match" : (intersperse "--match" $ reverse $ optMatch opts)
     H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportSpec cc) >>= H.evaluateSummary
 
 makeProtos :: Version -> IO (Maybe [ByteString])
