@@ -21,6 +21,7 @@ data Options = Options {
     optVersion    :: Bool
   , optDebugLog   :: Bool
   , optMatch      :: [String]
+  , optSkip       :: [String]
   , optQLogDir    :: Maybe FilePath
   , optKeyLogFile :: Maybe FilePath
   } deriving Show
@@ -30,6 +31,7 @@ defaultOptions = Options {
     optVersion    = False
   , optDebugLog   = False
   , optMatch      = []
+  , optSkip       = []
   , optQLogDir    = Nothing
   , optKeyLogFile = Nothing
   }
@@ -44,7 +46,10 @@ options = [
     "print debug info"
   , Option ['m'] ["match"]
     (ReqArg (\m o -> o { optMatch = m : optMatch o}) "<test case description>")
-    "Select a test case"
+    "Select test cases"
+  , Option ['s'] ["skip"]
+    (ReqArg (\m o -> o { optSkip = m : optSkip o}) "<test case description>")
+    "Skip test cases"
   , Option ['q'] ["qlog-dir"]
     (ReqArg (\dir o -> o { optQLogDir = Just dir }) "<dir>")
     "directory to store qlog"
@@ -85,9 +90,12 @@ main = do
               , confKeyLog     = getLogger $ optKeyLogFile opts
               }
           }
-        qcArgs
+        qcArgs0
           | null (optMatch opts) = []
           | otherwise            = "--match" : (intersperse "--match" $ reverse $ optMatch opts)
+        qcArgs
+          | null (optSkip opts) = qcArgs0
+          | otherwise           = "--skip" : (intersperse "--skip" $ reverse $ optSkip opts)
     H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportSpec cc) >>= H.evaluateSummary
 
 makeProtos :: Version -> IO (Maybe [ByteString])
