@@ -71,6 +71,12 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
             runC cc waitEstablished `shouldThrow` transportError
+        it "MUST send STREAM_STATE_ERROR if RESET_STREAM is received for a send-only stream [Transport 19.4]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated resetStream
+            runC cc waitEstablished `shouldThrow` transportErrorsIn [StreamStateError]
+        it "MUST send STREAM_STATE_ERROR if STOP_SENDING is received for a non-existing stream [Transport 19.5]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated stopSending
+            runC cc waitEstablished `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send PROTOCOL_VIOLATION if NEW_TOKEN is received [Transport 19.7]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated newToken
             runC cc waitEstablished `shouldThrow` transportError
@@ -213,9 +219,19 @@ newToken lvl plain
   | lvl == RTT1Level = plain { plainFrames = NewToken "DUMMY" : plainFrames plain }
   | otherwise = plain
 
+resetStream :: EncryptionLevel -> Plain -> Plain
+resetStream lvl plain
+  | lvl == RTT1Level = plain { plainFrames = ResetStream 3 H3NoError 0 : plainFrames plain }
+  | otherwise = plain
+
+stopSending :: EncryptionLevel -> Plain -> Plain
+stopSending lvl plain
+  | lvl == RTT1Level = plain { plainFrames = StopSending 101 H3NoError : plainFrames plain }
+  | otherwise = plain
+
 maxStreamData :: EncryptionLevel -> Plain -> Plain
 maxStreamData lvl plain
-  | lvl == RTT1Level = plain { plainFrames = MaxStreamData 102 1000000 : plainFrames plain }
+  | lvl == RTT1Level = plain { plainFrames = MaxStreamData 101 1000000 : plainFrames plain }
   | otherwise = plain
 
 maxStreamData2 :: EncryptionLevel -> Plain -> Plain
@@ -267,9 +283,9 @@ transportErrorsIn :: [TransportError] -> QUICError -> Bool
 transportErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` tes) || transportError qe
 transportErrorsIn _   _                           = False
 
-cryptoError :: QUICError -> Bool
-cryptoError (TransportErrorOccurs te _) = te `elem` [CryptoError TLS.InternalError, CryptoError TLS.HandshakeFailure]
-cryptoError _ = False
+cryptoErrorX :: QUICError -> Bool
+cryptoErrorX (TransportErrorOccurs te _) = te `elem` [cryptoError TLS.InternalError, cryptoError TLS.HandshakeFailure]
+cryptoErrorX _ = False
 
 -- Crypto Sec 4.8: QUIC permits the use of a generic code in place of
 -- a specific error code; see Section 11 of [QUIC-TRANSPORT]. For TLS
@@ -278,5 +294,5 @@ cryptoError _ = False
 -- generic error code to avoid possibly exposing confidential
 -- information.
 cryptoErrorsIn :: [TLS.AlertDescription] -> QUICError -> Bool
-cryptoErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` map CryptoError tes) || cryptoError qe
+cryptoErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` map cryptoError tes) || cryptoErrorX qe
 cryptoErrorsIn _   _                           = False
