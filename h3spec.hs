@@ -14,7 +14,7 @@ import System.Environment (getArgs, withArgs)
 import System.Exit (exitFailure, exitSuccess)
 import qualified Test.Hspec.Core.Runner as H
 
-import Transport
+import TransportError
 import qualified Paths_h3_spec as P
 
 data Options = Options {
@@ -96,7 +96,7 @@ main = do
         qcArgs
           | null (optSkip opts) = qcArgs0
           | otherwise           = "--skip" : (intersperse "--skip" $ reverse $ optSkip opts)
-    H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportSpec cc) >>= H.evaluateSummary
+    H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportErrorSpec cc) >>= H.evaluateSummary
 
 makeProtos :: Version -> IO (Maybe [ByteString])
 makeProtos Version1 = return $ Just ["h3","hq-interop"]
