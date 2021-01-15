@@ -8,12 +8,14 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import Data.List (foldl', intersperse)
 import Data.Version (showVersion)
+import qualified Network.HTTP3.Client as H3
 import Network.QUIC
 import System.Console.GetOpt
 import System.Environment (getArgs, withArgs)
 import System.Exit (exitFailure, exitSuccess)
 import qualified Test.Hspec.Core.Runner as H
 
+import HTTP3Error
 import TransportError
 import qualified Paths_h3_spec as P
 
@@ -96,7 +98,8 @@ main = do
         qcArgs
           | null (optSkip opts) = qcArgs0
           | otherwise           = "--skip" : (intersperse "--skip" $ reverse $ optSkip opts)
-    H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportErrorSpec cc) >>= H.evaluateSummary
+        h3cc = H3.ClientConfig "https" (C8.pack host)
+    H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportErrorSpec cc >> h3ErrorSpec cc h3cc) >>= H.evaluateSummary
 
 makeProtos :: Version -> IO (Maybe [ByteString])
 makeProtos Version1 = return $ Just ["h3","hq-interop"]
