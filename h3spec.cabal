@@ -1,5 +1,5 @@
 name:                h3-spec
-version:             0.1.0
+version:             0.1.1
 synopsis:            QUIC
 description:         Test tool for error cases of QUIC and HTTP/3
 license:             BSD3
