@@ -20,7 +20,7 @@ executable h3spec
                         TransportError
                         Paths_h3_spec
   ghc-options:          -Wall -threaded -rtsopts
-  build-depends:        base >= 4.0 && < 5
+  build-depends:        base >= 4.9 && < 5
                       , bytestring
                       , hspec
                       , hspec-core
@@ -29,3 +29,4 @@ executable h3spec
                       , network
                       , quic
                       , tls
+  default-extensions:   Strict StrictData
