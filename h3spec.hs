@@ -26,6 +26,7 @@ data Options = Options {
   , optSkip       :: [String]
   , optQLogDir    :: Maybe FilePath
   , optKeyLogFile :: Maybe FilePath
+  , optTimeout    :: Int
   } deriving Show
 
 defaultOptions :: Options
@@ -36,6 +37,7 @@ defaultOptions = Options {
   , optSkip       = []
   , optQLogDir    = Nothing
   , optKeyLogFile = Nothing
+  , optTimeout    = 2000 -- 2 milliseconds
   }
 
 options :: [OptDescr (Options -> Options)]
@@ -58,6 +60,9 @@ options = [
   , Option ['l'] ["key-log-file"]
     (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
     "a file to store negotiated secrets"
+  , Option ['t'] ["timeout"]
+    (ReqArg (\ms o -> o { optTimeout = read ms }) "<milliseconds>")
+    "timeout for each test case"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -99,7 +104,8 @@ main = do
           | null (optSkip opts) = qcArgs0
           | otherwise           = "--skip" : (intersperse "--skip" $ reverse $ optSkip opts)
         h3cc = H3.ClientConfig "https" (C8.pack host)
-    H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportErrorSpec cc >> h3ErrorSpec cc h3cc) >>= H.evaluateSummary
+        ms = optTimeout opts
+    H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms) >>= H.evaluateSummary
 
 makeProtos :: Version -> IO (Maybe [ByteString])
 makeProtos Version1 = return $ Just ["h3","h3-33","h3-34","hq-interop"]
