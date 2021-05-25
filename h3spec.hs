@@ -91,11 +91,9 @@ main = do
           , ccPortName   = port
           , ccALPN       = makeProtos
           , ccDebugLog   = optDebugLog opts
-          , ccConfig     = defaultConfig {
-                confVersions = [Version1,Draft29,Draft32]
-              , confQLog       = optQLogDir opts
-              , confKeyLog     = getLogger $ optKeyLogFile opts
-              }
+          , ccVersions   = [Version1,Draft29,Draft32]
+          , ccQLog       = optQLogDir opts
+          , ccKeyLog     = getLogger $ optKeyLogFile opts
           }
         qcArgs0
           | null (optMatch opts) = []

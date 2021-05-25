@@ -5,7 +5,6 @@ module HTTP3Error (
   ) where
 
 import Control.Concurrent
-import qualified Control.Exception as E
 import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
@@ -14,8 +13,9 @@ import qualified Network.HTTP3.Client as H3
 import Network.HTTP3.Internal
 import Network.QPACK.Internal
 import qualified Network.QUIC as QUIC
-import System.Timeout
 import Test.Hspec
+import qualified UnliftIO.Exception as E
+import UnliftIO.Timeout
 
 ----------------------------------------------------------------
 
@@ -212,11 +212,7 @@ zeroInsertCountIncrement strm = QUIC.sendStream strm "\x00"
 addQUICHook :: QUIC.ClientConfig -> (QUIC.Hooks -> QUIC.Hooks) -> QUIC.ClientConfig
 addQUICHook cc modify = cc'
   where
-    conf = QUIC.ccConfig cc
-    hooks = QUIC.confHooks conf
-    hooks' = modify hooks
-    conf' = conf { QUIC.confHooks = hooks' }
-    cc' = cc { QUIC.ccConfig = conf' }
+    cc' = cc { QUIC.ccHooks = modify $ QUIC.ccHooks cc }
 
 setOnResetStreamReceived :: (QUIC.Stream -> ApplicationProtocolError -> IO ()) -> QUIC.Hooks -> QUIC.Hooks
 setOnResetStreamReceived f hooks = hooks { QUIC.onResetStreamReceived = f }

@@ -29,4 +29,5 @@ executable h3spec
                       , network
                       , quic
                       , tls
+                      , unliftio
   default-extensions:   Strict StrictData
