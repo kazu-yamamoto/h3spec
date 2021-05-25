@@ -17,7 +17,7 @@ import qualified Test.Hspec.Core.Runner as H
 
 import HTTP3Error
 import TransportError
-import qualified Paths_h3_spec as P
+import qualified Paths_h3spec as P
 
 data Options = Options {
     optVersion    :: Bool

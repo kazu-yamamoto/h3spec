@@ -18,7 +18,7 @@ executable h3spec
   main-is:              h3spec.hs
   other-modules:        HTTP3Error
                         TransportError
-                        Paths_h3_spec
+                        Paths_h3spec
   ghc-options:          -Wall -threaded -rtsopts
   build-depends:        base >= 4.9 && < 5
                       , bytestring
