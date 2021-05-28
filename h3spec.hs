@@ -3,13 +3,11 @@
 module Main where
 
 import Control.Monad (when)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import Data.List (foldl', intersperse)
 import Data.Version (showVersion)
 import qualified Network.HTTP3.Client as H3
-import Network.QUIC
+import Network.QUIC.Internal
 import System.Console.GetOpt
 import System.Environment (getArgs, withArgs)
 import System.Exit (exitFailure, exitSuccess)
@@ -89,9 +87,8 @@ main = do
         cc = defaultClientConfig {
             ccServerName = host
           , ccPortName   = port
-          , ccALPN       = makeProtos
+          , ccALPN       = \_ -> return $ Just ["h3","h3-29","hq-interop","hq-29"]
           , ccDebugLog   = optDebugLog opts
-          , ccVersions   = [Version1,Draft29,Draft32]
           , ccQLog       = optQLogDir opts
           , ccKeyLog     = getLogger $ optKeyLogFile opts
           }
@@ -104,14 +101,6 @@ main = do
         h3cc = H3.ClientConfig "https" (C8.pack host)
         ms = optTimeout opts
     H.readConfig H.defaultConfig qcArgs >>= withArgs [] . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms) >>= H.evaluateSummary
-
-makeProtos :: Version -> IO (Maybe [ByteString])
-makeProtos Version1 = return $ Just ["h3","h3-33","h3-34","hq-interop"]
-makeProtos ver = return $ Just [h3X,hqX]
-  where
-    verbs = C8.pack $ show $ fromVersion ver
-    h3X = "h3-" `BS.append` verbs
-    hqX = "hq-" `BS.append` verbs
 
 getLogger :: Maybe FilePath -> (String -> IO ())
 getLogger Nothing     = \_ -> return ()
