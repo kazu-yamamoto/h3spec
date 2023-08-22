@@ -4,13 +4,13 @@ module TransportError (
     transportErrorSpec
   ) where
 
-import Control.Concurrent
 import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Network.TLS as TLS
-import Network.TLS.QUIC (ExtensionRaw)
+import Network.TLS.QUIC (ExtensionRaw(..))
 import Test.Hspec
+import UnliftIO.Concurrent
 import UnliftIO.Timeout
 
 import Network.QUIC.Client
@@ -123,12 +123,17 @@ transportErrorSpec cc0 ms = do
             runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send unexpected_message TLS alert if KeyUpdate in 1-RTT is received [TLS 6]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate2
-            runC cc ms (\_ -> threadDelay 1000000) `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
+            runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
             runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.NoApplicationProtocol]
         it "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
+            runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
+        it "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
+            let f [ExtensionRaw _ v] = [ExtensionRaw 0xffa5 v]
+                f _                  = error "f"
+                cc = addHook cc0 $ setOnTLSExtensionCreated f
             runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
         it "MUST send unexpected_message TLS alert if EndOfEarlyData is received [TLS 8.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoEndOfEarlyData
