@@ -60,7 +60,7 @@ options = [
     "a file to store negotiated secrets"
   , Option ['t'] ["timeout"]
     (ReqArg (\ms o -> o { optTimeout = read ms }) "<milliseconds>")
-    "timeout for each test case"
+    "timeout for each test case (2000)"
   ]
 
 showUsageAndExit :: String -> IO a
