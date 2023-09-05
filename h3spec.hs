@@ -20,6 +20,7 @@ import qualified Paths_h3spec as P
 data Options = Options {
     optVersion    :: Bool
   , optDebugLog   :: Bool
+  , optValidate   :: Bool
   , optMatch      :: [String]
   , optSkip       :: [String]
   , optQLogDir    :: Maybe FilePath
@@ -31,6 +32,7 @@ defaultOptions :: Options
 defaultOptions = Options {
     optVersion    = False
   , optDebugLog   = False
+  , optValidate   = True
   , optMatch      = []
   , optSkip       = []
   , optQLogDir    = Nothing
@@ -61,6 +63,9 @@ options = [
   , Option ['t'] ["timeout"]
     (ReqArg (\ms o -> o { optTimeout = read ms }) "<milliseconds>")
     "timeout for each test case (2000)"
+  , Option ['n'] ["no-validate"]
+    (NoArg (\o -> o { optValidate = False }))
+    "no validating server certificates"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -91,6 +96,7 @@ main = do
           , ccDebugLog   = optDebugLog opts
           , ccQLog       = optQLogDir opts
           , ccKeyLog     = getLogger $ optKeyLogFile opts
+          , ccValidate   = optValidate opts
           }
         qcArgs0
           | null (optMatch opts) = []
