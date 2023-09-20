@@ -86,10 +86,10 @@ main = do
     when (optVersion opts) $ do
         putStrLn $ "h3spec " ++ showVersion P.version
         exitSuccess
-    when (length args /= 2) $ do
-        showUsageAndExit ""
-    let [host,port] = args
-        cc = defaultClientConfig {
+    (host,port) <- case args of
+      [h,p] -> return (h,p)
+      _ -> showUsageAndExit ""
+    let cc = defaultClientConfig {
             ccServerName = host
           , ccPortName   = port
           , ccALPN       = \_ -> return $ Just ["h3","h3-29","hq-interop","hq-29"]
