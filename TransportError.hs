@@ -8,7 +8,7 @@ import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Network.TLS as TLS
-import Network.TLS.QUIC (ExtensionRaw (..))
+import Network.TLS.QUIC (ExtensionID (..), ExtensionRaw (..))
 import Test.Hspec
 import UnliftIO.Concurrent
 import UnliftIO.Timeout
@@ -45,6 +45,9 @@ transportErrorSpec cc0 ms = do
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated largeOffset
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [FlowControlError]
+        it "MUST send STREAM_LIMIT_ERROR if a stream ID exceeding the limit" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated largeStreamId
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamLimitError]
         it
             "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]"
             $ \_ -> do
@@ -133,7 +136,7 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated sendOnlyStream
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it
-            "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.10]"
+            "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a stream that has not yet been created [Transport 19.10]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated maxStreamData
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
@@ -191,7 +194,7 @@ transportErrorSpec cc0 ms = do
         it
             "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]"
             $ \_ -> do
-                let f [ExtensionRaw _ v] = [ExtensionRaw 0xffa5 v]
+                let f [ExtensionRaw _ v] = [ExtensionRaw (ExtensionID 0xffa5) v]
                     f _ = error "f"
                     cc = addHook cc0 $ setOnTLSExtensionCreated f
                 runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
@@ -245,10 +248,8 @@ rrBits :: EncryptionLevel -> EncryptionLevel -> Plain -> Plain
 rrBits lvl0 lvl plain
     | lvl0 == lvl =
         if plainPacketNumber plain /= 0
-            then
-                plain{plainFlags = Flags 0x08}
-            else
-                plain
+            then plain{plainFlags = Flags 0x08}
+            else plain
     | otherwise = plain
 
 dropInitialSourceConnectionId :: Parameters -> Parameters
@@ -299,6 +300,13 @@ largeOffset lvl plain
     | otherwise = plain
   where
     fake = StreamF 0 100000000 ["GET /\r\n"] True
+
+largeStreamId :: EncryptionLevel -> Plain -> Plain
+largeStreamId lvl plain
+    | lvl == RTT1Level = plain{plainFrames = fake : plainFrames plain}
+    | otherwise = plain
+  where
+    fake = StreamF 1000000000 0 ["GET /\r\n"] True
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
