@@ -3,7 +3,6 @@
 module Main where
 
 import Control.Monad (when)
-import qualified Data.ByteString.Char8 as C8
 import Data.List (foldl', intersperse)
 import Data.Version (showVersion)
 import qualified Network.HTTP3.Client as H3
@@ -125,7 +124,7 @@ main = do
             | null (optSkip opts) = qcArgs0
             | otherwise =
                 "--skip" : (intersperse "--skip" $ reverse $ optSkip opts)
-        h3cc = H3.ClientConfig "https" (C8.pack host)
+        h3cc = H3.ClientConfig "https" host
         ms = optTimeout opts
     H.readConfig H.defaultConfig qcArgs
         >>= withArgs [] . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms)
