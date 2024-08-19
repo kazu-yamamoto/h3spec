@@ -27,7 +27,7 @@ executable h3spec
                       , http-types
                       , http3 >= 0.0.10
                       , network
-                      , quic >= 0.1.20 && < 0.2
+                      , quic >= 0.2 && < 0.3
                       , tls
                       , unliftio
   default-extensions:   Strict StrictData
