@@ -1,5 +1,5 @@
 name:                h3spec
-version:             0.1.12
+version:             0.1.13
 synopsis:            QUIC
 description:         Test tool for error cases of QUIC and HTTP/3
 license:             BSD3
@@ -25,8 +25,8 @@ executable h3spec
                       , hspec
                       , hspec-core
                       , http-types
-                      , http3 >= 0.0.10
+                      , http3 >= 0.0.22
                       , network
-                      , quic >= 0.2 && < 0.3
+                      , quic >= 0.2.10 && < 0.3
                       , tls
   default-extensions:   Strict StrictData
