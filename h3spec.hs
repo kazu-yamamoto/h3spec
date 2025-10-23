@@ -124,7 +124,7 @@ main = do
             | null (optSkip opts) = qcArgs0
             | otherwise =
                 "--skip" : (intersperse "--skip" $ reverse $ optSkip opts)
-        h3cc = H3.ClientConfig "https" host
+        h3cc = H3.defaultClientConfig{H3.authority = host}
         ms = optTimeout opts
     H.readConfig H.defaultConfig qcArgs
         >>= withArgs [] . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms)
