@@ -13,6 +13,7 @@ import Network.TLS.QUIC (ExtensionID (..), ExtensionRaw (..))
 import System.Timeout
 import Test.Hspec
 
+import Network.QUIC (stream)
 import Network.QUIC.Client
 import Network.QUIC.Internal hiding (timeout)
 
@@ -35,6 +36,8 @@ runCnoOp cc ms = timeout us $ run cc body'
     us = ms * 1000
     body' conn = do
         waitEstablished conn
+        -- dirty hack: we create stream 0 in some cases
+        _ <- stream conn
         threadDelay us
 
 transportErrorSpec :: ClientConfig -> Millisecond -> SpecWith a
