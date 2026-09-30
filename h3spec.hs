@@ -127,7 +127,7 @@ main = do
         h3cc = H3.defaultClientConfig{H3.authority = host}
         ms = optTimeout opts
     H.readConfig H.defaultConfig qcArgs
-        >>= withArgs [] . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms)
+        >>= withArgs [] . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms (const Nothing))
         >>= H.evaluateSummary
 
 getLogger :: Maybe FilePath -> (String -> IO ())
