@@ -1,5 +1,5 @@
 name:                h3spec
-version:             0.1.13
+version:             0.1.14
 synopsis:            QUIC
 description:         Test tool for error cases of QUIC and HTTP/3
 license:             BSD3
@@ -9,7 +9,7 @@ maintainer:          kazu@iij.ad.jp
 -- copyright:
 category:            Web
 build-type:          Simple
--- extra-source-files:  ChangeLog.md
+extra-source-files:  ChangeLog.md
 cabal-version:       >= 1.10
 
 executable h3spec
