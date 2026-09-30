@@ -22,11 +22,12 @@ executable h3spec
   ghc-options:          -Wall -threaded -rtsopts
   build-depends:        base >= 4.9 && < 5
                       , bytestring
+                      , case-insensitive
                       , hspec
                       , hspec-core
                       , http-types
-                      , http3 >= 0.0.22
+                      , http3 >= 0.1.7 && < 0.2
                       , network
-                      , quic >= 0.2.10 && < 0.4
+                      , quic >= 0.3.13 && < 0.4
                       , tls
   default-extensions:   Strict StrictData

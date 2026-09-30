@@ -75,6 +75,11 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setStatelessResetToken
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it
+            "MUST send TRANSPORT_PARAMETER_ERROR if a parameter value is malformed [Transport 18]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnTLSExtensionCreated danglingParameter
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
+        it
             "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size < 1200 [Transport 7.4 and 18.2]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
@@ -90,6 +95,26 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setMaxAckDelay
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it
+            "MUST send TRANSPORT_PARAMETER_ERROR if initial_max_streams_bidi > 2^60 [Transport 18.2]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnTransportParametersCreated setMaxStreamsBidi
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
+        it
+            "MUST send TRANSPORT_PARAMETER_ERROR if initial_max_streams_uni > 2^60 [Transport 18.2]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnTransportParametersCreated setMaxStreamsUni
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
+        it
+            "MUST send FRAME_ENCODING_ERROR if an ACK range reaches below zero [Transport 19.3.1]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated impossibleAckRange
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError]
+        it
+            "SHOULD send PROTOCOL_VIOLATION on an ACK for a packet never sent [Transport 13.1]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated ackForUnsentPacket
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [ProtocolViolation]
+        it
             "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated unknownFrame
@@ -103,9 +128,29 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated $ rrBits HandshakeLevel
                 runCnoOp cc ms `shouldThrow` transportError
         it
+            "MUST send CRYPTO_BUFFER_EXCEEDED if CRYPTO data is buffered beyond the limit [Transport 7.5]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated cryptoBeyondBuffer
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [CryptoBufferExceeded]
+        it
             "MUST send PROTOCOL_VIOLATION if PATH_CHALLENGE in Handshake is received [Transport 17.2.4]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated handshakePathChallenge
+                runCnoOp cc ms `shouldThrow` transportError
+        it
+            "MUST send PROTOCOL_VIOLATION if RETIRE_CONNECTION_ID for a sequence number never issued [Transport 19.16]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated retireUnissued
+                runCnoOp cc ms `shouldThrow` transportError
+        it
+            "MUST send PROTOCOL_VIOLATION if STREAM_DATA_BLOCKED in Handshake is received [Transport 12.4]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated handshakeStreamDataBlocked
+                runCnoOp cc ms `shouldThrow` transportError
+        it
+            "MUST send PROTOCOL_VIOLATION if DATA_BLOCKED in Handshake is received [Transport 12.4]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated handshakeDataBlocked
                 runCnoOp cc ms `shouldThrow` transportError
         it
             "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]"
@@ -233,6 +278,14 @@ setOnPlainCreated f hooks = hooks{onPlainCreated = f}
 setOnTransportParametersCreated :: (Parameters -> Parameters) -> Hooks -> Hooks
 setOnTransportParametersCreated f hooks = hooks{onTransportParametersCreated = f}
 
+-- initial_max_data announcing a zero-length value.  Everything the peer
+-- really sent is left in front of it, so this is the value alone being wrong
+-- rather than the list being cut short.  The value of an integer parameter is
+-- one variable-length integer, and there is no such thing in no octets.
+danglingParameter :: [ExtensionRaw] -> [ExtensionRaw]
+danglingParameter [ExtensionRaw eid v] = [ExtensionRaw eid (v <> "\x04\x00")]
+danglingParameter xs = xs
+
 setOnTLSExtensionCreated :: ([ExtensionRaw] -> [ExtensionRaw]) -> Hooks -> Hooks
 setOnTLSExtensionCreated f params = params{onTLSExtensionCreated = f}
 
@@ -292,11 +345,21 @@ setAckDelayExponent params = params{ackDelayExponent = 30}
 setMaxAckDelay :: Parameters -> Parameters
 setMaxAckDelay params = params{maxAckDelay = 2 ^ (15 :: Int)}
 
+-- A stream id has 62 bits, two of them saying who opened it and whether it is
+-- bidirectional, so a count past 2^60 names no stream.
+setMaxStreamsBidi :: Parameters -> Parameters
+setMaxStreamsBidi params = params{initialMaxStreamsBidi = 2 ^ (60 :: Int) + 1}
+
+setMaxStreamsUni :: Parameters -> Parameters
+setMaxStreamsUni params = params{initialMaxStreamsUni = 2 ^ (60 :: Int) + 1}
+
 ----------------------------------------------------------------
 
--- Stream 0 is not created internally.  It is assumed that a server
--- send CC without sending back Stream 0.  If the server send back any
--- data for Stream 0, `streamNotCreatedYet` throws an exception, sigh.
+-- Stream 0, which the client has not opened.  The server must answer the
+-- offset with FLOW_CONTROL_ERROR and nothing else: anything it sends back on
+-- stream 0 is, to a client that never opened it, a STREAM_STATE_ERROR
+-- (RFC 9000 Sec 19.8), and the client closes the connection before the error
+-- we are waiting for arrives.
 largeOffset :: EncryptionLevel -> Plain -> Plain
 largeOffset lvl plain
     | lvl == RTT1Level = plain{plainFrames = fake : plainFrames plain}
@@ -311,16 +374,66 @@ largeStreamId lvl plain
   where
     fake = StreamF 1000000000 0 ["GET /\r\n"] True
 
+-- Largest acknowledged 5, then a gap of 10: the next range would start at
+-- 5 - 10 - 2, which is not a packet number.
+impossibleAckRange :: EncryptionLevel -> Plain -> Plain
+impossibleAckRange lvl plain
+    | lvl == RTT1Level =
+        plain{plainFrames = Ack (AckInfo 5 0 [(10, 0)]) 0 : plainFrames plain}
+    | otherwise = plain
+
+-- Nobody has sent a million packets down this connection.
+ackForUnsentPacket :: EncryptionLevel -> Plain -> Plain
+ackForUnsentPacket lvl plain
+    | lvl == RTT1Level =
+        plain{plainFrames = Ack (AckInfo 1000000 0 []) 0 : plainFrames plain}
+    | otherwise = plain
+
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
     | lvl == RTT1Level =
         plain{plainFrames = UnknownFrame 0x20 : plainFrames plain}
     | otherwise = plain
 
+-- CRYPTO frames are outside flow control, so nothing but the buffer limit
+-- stops a peer from parking a fragment far past where the stream has got to
+-- and having it held.  One octet at this offset is enough to ask for more
+-- than any bound the receiver could sensibly hold.
+cryptoBeyondBuffer :: EncryptionLevel -> Plain -> Plain
+cryptoBeyondBuffer lvl plain
+    | lvl == HandshakeLevel =
+        plain{plainFrames = CryptoF 100000000 "x" : plainFrames plain}
+    | otherwise = plain
+
 handshakePathChallenge :: EncryptionLevel -> Plain -> Plain
 handshakePathChallenge lvl plain
     | lvl == HandshakeLevel =
         plain{plainFrames = PathChallenge (PathData "01234567") : plainFrames plain}
+    | otherwise = plain
+
+-- RFC 9000 Sec 19.16: "Receipt of a RETIRE_CONNECTION_ID frame containing a
+-- sequence number greater than any previously sent to the peer MUST be
+-- treated as a connection error of type PROTOCOL_VIOLATION."  No endpoint has
+-- given out a hundred thousand connection IDs.
+retireUnissued :: EncryptionLevel -> Plain -> Plain
+retireUnissued lvl plain
+    | lvl == RTT1Level =
+        plain{plainFrames = RetireConnectionID 100000 : plainFrames plain}
+    | otherwise = plain
+
+-- RFC 9000 Table 3 has STREAM_DATA_BLOCKED and DATA_BLOCKED in 0-RTT and
+-- 1-RTT packets only, and Sec 12.4 makes a frame in a packet that may not
+-- carry it a connection error of type PROTOCOL_VIOLATION.
+handshakeStreamDataBlocked :: EncryptionLevel -> Plain -> Plain
+handshakeStreamDataBlocked lvl plain
+    | lvl == HandshakeLevel =
+        plain{plainFrames = StreamDataBlocked 0 0 : plainFrames plain}
+    | otherwise = plain
+
+handshakeDataBlocked :: EncryptionLevel -> Plain -> Plain
+handshakeDataBlocked lvl plain
+    | lvl == HandshakeLevel =
+        plain{plainFrames = DataBlocked 0 : plainFrames plain}
     | otherwise = plain
 
 noFrames :: EncryptionLevel -> Plain -> Plain
