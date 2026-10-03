@@ -3,7 +3,7 @@
 module Main where
 
 import Control.Monad (when)
-import Data.List (foldl', intersperse)
+import qualified Data.List as L
 import Data.Version (showVersion)
 import qualified Network.HTTP3.Client as H3
 import Network.QUIC.Internal
@@ -98,7 +98,7 @@ main :: IO ()
 main = do
     args0 <- getArgs
     (opts, args) <- case getOpt Permute options args0 of
-        (o, n, []) -> return (foldl' (flip id) defaultOptions o, n)
+        (o, n, []) -> return (L.foldl' (flip id) defaultOptions o, n)
         (_, _, errs) -> showUsageAndExit $ concat errs
     when (optVersion opts) $ do
         putStrLn $ "h3spec " ++ showVersion P.version
@@ -119,15 +119,16 @@ main = do
         qcArgs0
             | null (optMatch opts) = []
             | otherwise =
-                "--match" : (intersperse "--match" $ reverse $ optMatch opts)
+                "--match" : (L.intersperse "--match" $ reverse $ optMatch opts)
         qcArgs
             | null (optSkip opts) = qcArgs0
             | otherwise =
-                "--skip" : (intersperse "--skip" $ reverse $ optSkip opts)
+                "--skip" : (L.intersperse "--skip" $ reverse $ optSkip opts)
         h3cc = H3.defaultClientConfig{H3.authority = host}
         ms = optTimeout opts
     H.readConfig H.defaultConfig qcArgs
-        >>= withArgs [] . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms (const Nothing))
+        >>= withArgs []
+            . H.runSpec (transportErrorSpec cc ms >> h3ErrorSpec cc h3cc ms (const Nothing))
         >>= H.evaluateSummary
 
 getLogger :: Maybe FilePath -> (String -> IO ())
