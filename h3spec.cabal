@@ -27,7 +27,6 @@ executable h3spec
                       , hspec-core
                       , http-types
                       , http3 >= 0.1.7 && < 0.2
-                      , network
                       , quic >= 0.3.13 && < 0.4
-                      , tls
+                      , tls >= 2.3 && < 2.6
   default-extensions:   Strict StrictData

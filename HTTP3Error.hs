@@ -31,25 +31,7 @@ type Millisecond = Int
 
 runC
     :: ClientConfig -> H3.ClientConfig -> H3.Config -> Millisecond -> IO (Maybe ())
-runC qcc cconf conf ms = timeout us $ run qcc $ \conn -> do
-    info <- getConnectionInfo conn
-    case alpn info of
-        Just proto | "hq" `BS.isPrefixOf` proto -> do
-            waitEstablished conn
-            putStrLn $
-                "Warning: "
-                    ++ C8.unpack proto
-                    ++ " is negotiated. Skipping this test. Use \"h3spec -s HTTP/3\" next time."
-            E.throwIO $ ApplicationProtocolErrorIsReceived H3InternalError ""
-        _ -> H3.run conn cconf conf client
-  where
-    us = ms * 1000
-    client :: H3.Client ()
-    client sendRequest _aux = do
-        let req = H3.requestNoBody methodGet "/" []
-        ret <- sendRequest req $ \_rsp -> return ()
-        threadDelay 100000
-        return ret
+runC = runCReq $ H3.requestNoBody methodGet "/" []
 
 -- | Like 'runC', but sending a request of our own choosing.
 runCReq
@@ -64,10 +46,15 @@ runCReq req qcc cconf conf ms = timeout us $ run qcc $ \conn -> do
     case alpn info of
         Just proto | "hq" `BS.isPrefixOf` proto -> do
             waitEstablished conn
+            putStrLn $
+                "Warning: "
+                    ++ C8.unpack proto
+                    ++ " is negotiated. Skipping this test. Use \"h3spec -s HTTP/3\" next time."
             E.throwIO $ ApplicationProtocolErrorIsReceived H3InternalError ""
         _ -> H3.run conn cconf conf client
   where
     us = ms * 1000
+    client :: H3.Client ()
     client sendRequest _aux = do
         ret <- sendRequest req $ \_rsp -> return ()
         threadDelay 100000
@@ -97,14 +84,14 @@ h3ErrorSpec qcc cconf ms served = do
                     `shouldThrow` applicationProtocolErrorsIn [H3FrameUnexpected]
         it "MUST send H3_MESSAGE_ERROR if a pseudo-header is duplicated [HTTP/3 4.3.1]" $ \_ -> do
             let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader3
-                qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
+                qcc' = throwOnReset qcc
             runC qcc' cconf conf ms
                 `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         it
             "MUST send H3_MESSAGE_ERROR if mandatory pseudo-header fields are absent [HTTP/3 4.3.1]"
             $ \x -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader0
-                    qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
+                    qcc' = throwOnReset qcc
                 refusedNotServed (served x) $
                     runC qcc' cconf conf ms
                         `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
@@ -112,14 +99,14 @@ h3ErrorSpec qcc cconf ms served = do
             "MUST send H3_MESSAGE_ERROR if prohibited pseudo-header fields are present [HTTP/3 4.3]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader1
-                    qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
+                    qcc' = throwOnReset qcc
                 runC qcc' cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         it
             "MUST send H3_MESSAGE_ERROR if pseudo-header fields exist after fields [HTTP/3 4.3]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader2
-                    qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
+                    qcc' = throwOnReset qcc
                 runC qcc' cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         forM_ connectionSpecific $ \field@(name, _) ->
@@ -130,7 +117,7 @@ h3ErrorSpec qcc cconf ms served = do
                 )
                 $ \x -> do
                     let req = H3.requestNoBody methodGet "/" [field]
-                        qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
+                        qcc' = throwOnReset qcc
                     refusedNotServed (served x) $
                         runCReq req qcc' cconf conf0 ms
                             `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
@@ -340,7 +327,7 @@ h3DrainSpec qcc cconf ms = do
                 -- none.  /drain reads the body, which is where the count is
                 -- checked; a body nobody reads is never counted.
                 let req = H3.requestNoBody methodPost "/drain" [("content-length", "5")]
-                    qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
+                    qcc' = throwOnReset qcc
                 runCReq req qcc' cconf conf0 ms
                     `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         it
@@ -349,7 +336,7 @@ h3DrainSpec qcc cconf ms = do
                 -- /drain reads the body, and so the trailers after it.
                 let req0 = H3.requestBuilder methodPost "/drain" [] "hello"
                     req = H3.setRequestTrailersMaker req0 connectionTrailer
-                    qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
+                    qcc' = throwOnReset qcc
                 runCReq req qcc' cconf conf0 ms
                     `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
 
@@ -586,6 +573,11 @@ addQUICHook :: ClientConfig -> (Hooks -> Hooks) -> ClientConfig
 addQUICHook cc modify = cc'
   where
     cc' = cc{ccHooks = modify $ ccHooks cc}
+
+-- | Turning a RESET_STREAM from the server into the exception the tests expect.
+throwOnReset :: ClientConfig -> ClientConfig
+throwOnReset qcc = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr ->
+    E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
 
 setOnResetStreamReceived
     :: (Stream -> ApplicationProtocolError -> IO ()) -> Hooks -> Hooks

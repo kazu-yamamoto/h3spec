@@ -38,7 +38,7 @@ defaultOptions =
         , optSkip = []
         , optQLogDir = Nothing
         , optKeyLogFile = Nothing
-        , optTimeout = 2000 -- 2 milliseconds
+        , optTimeout = 2000 -- 2 seconds
         }
 
 options :: [OptDescr (Options -> Options)]
