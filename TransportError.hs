@@ -119,6 +119,13 @@ transportErrorSpec cc0 ms = do
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated unknownFrame
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError]
+        it
+            "MUST send FRAME_ENCODING_ERROR if a frame is cut short [Transport 12.4]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated truncatedFrame
+                -- Not the generic codes 'transportErrorsIn' lets through:
+                -- INTERNAL_ERROR is what the decoder's exception used to give.
+                runCnoOp cc ms `shouldThrow` frameEncodingError
         it "MUST send PROTOCOL_VIOLATION on no frames [Transport 12.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated noFrames
             runCnoOp cc ms `shouldThrow` transportError
@@ -379,20 +386,33 @@ largeStreamId lvl plain
 impossibleAckRange :: EncryptionLevel -> Plain -> Plain
 impossibleAckRange lvl plain
     | lvl == RTT1Level =
-        plain{plainFrames = Ack (AckInfo 5 0 [(10, 0)]) 0 : plainFrames plain}
+        plain{plainFrames = Ack (AckInfo 5 0 [(10, 0)]) noDelay : plainFrames plain}
     | otherwise = plain
 
 -- Nobody has sent a million packets down this connection.
 ackForUnsentPacket :: EncryptionLevel -> Plain -> Plain
 ackForUnsentPacket lvl plain
     | lvl == RTT1Level =
-        plain{plainFrames = Ack (AckInfo 1000000 0 []) 0 : plainFrames plain}
+        plain{plainFrames = Ack (AckInfo 1000000 0 []) noDelay : plainFrames plain}
     | otherwise = plain
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
     | lvl == RTT1Level =
         plain{plainFrames = UnknownFrame 0x20 : plainFrames plain}
+    | otherwise = plain
+
+-- A CRYPTO frame at offset 0 whose length is an eight-octet integer that
+-- starts 0x3f: whatever follows, it runs past the end of the packet.  Put
+-- together an octet at a time, since no frame this library builds is cut
+-- short.
+truncatedFrame :: EncryptionLevel -> Plain -> Plain
+truncatedFrame lvl plain
+    | lvl == RTT1Level =
+        plain
+            { plainFrames =
+                plainFrames plain ++ [UnknownFrame 0x06, UnknownFrame 0x00, UnknownFrame 0xff]
+            }
     | otherwise = plain
 
 -- CRYPTO frames are outside flow control, so nothing but the buffer limit
@@ -562,6 +582,10 @@ transportError _ = False
 -- it detects an error condition; a generic error code (such as
 -- PROTOCOL_VIOLATION or INTERNAL_ERROR) can always be used in place
 -- of specific error codes.
+frameEncodingError :: QUICException -> Bool
+frameEncodingError (TransportErrorIsReceived FrameEncodingError _) = True
+frameEncodingError _ = False
+
 transportErrorsIn :: [TransportError] -> QUICException -> Bool
 transportErrorsIn tes qe@(TransportErrorIsReceived te _) = (te `elem` tes) || transportError qe
 transportErrorsIn _ _ = False
