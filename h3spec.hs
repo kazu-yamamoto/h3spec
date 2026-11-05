@@ -4,6 +4,7 @@ module Main where
 
 import Control.Monad (when)
 import qualified Data.List as L
+import Data.Maybe (fromMaybe)
 import Data.Version (showVersion)
 import qualified Network.HTTP3.Client as H3
 import Network.QUIC.Internal
@@ -11,6 +12,7 @@ import System.Console.GetOpt
 import System.Environment (getArgs, withArgs)
 import System.Exit (exitFailure, exitSuccess)
 import qualified Test.Hspec.Core.Runner as H
+import Text.Read (readMaybe)
 
 import HTTP3Error
 import qualified Paths_h3spec as P
@@ -76,7 +78,7 @@ options =
     , Option
         ['t']
         ["timeout"]
-        (ReqArg (\ms o -> o{optTimeout = read ms}) "<milliseconds>")
+        (ReqArg setTimeout "<milliseconds>")
         "timeout for each test case (2000)"
     , Option
         ['n']
@@ -84,6 +86,10 @@ options =
         (NoArg (\o -> o{optValidate = False}))
         "no validating server certificates"
     ]
+
+-- An invalid value is reported by main after getOpt.
+setTimeout :: String -> Options -> Options
+setTimeout ms o = o{optTimeout = fromMaybe (-1) $ readMaybe ms}
 
 showUsageAndExit :: String -> IO a
 showUsageAndExit msg = do
@@ -100,6 +106,8 @@ main = do
     (opts, args) <- case getOpt Permute options args0 of
         (o, n, []) -> return (L.foldl' (flip id) defaultOptions o, n)
         (_, _, errs) -> showUsageAndExit $ concat errs
+    when (optTimeout opts <= 0) $
+        showUsageAndExit "timeout must be a positive integer\n"
     when (optVersion opts) $ do
         putStrLn $ "h3spec " ++ showVersion P.version
         exitSuccess
@@ -123,7 +131,7 @@ main = do
         qcArgs
             | null (optSkip opts) = qcArgs0
             | otherwise =
-                "--skip" : (L.intersperse "--skip" $ reverse $ optSkip opts)
+                qcArgs0 ++ "--skip" : (L.intersperse "--skip" $ reverse $ optSkip opts)
         h3cc = H3.defaultClientConfig{H3.authority = host}
         ms = optTimeout opts
     H.readConfig H.defaultConfig qcArgs

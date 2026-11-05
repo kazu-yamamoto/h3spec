@@ -45,7 +45,8 @@ transportErrorSpec cc0 ms = do
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated largeOffset
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [FlowControlError]
-        it "MUST send STREAM_LIMIT_ERROR if a stream ID exceeds the limit [Transport 4.6]" $ \_ -> do
+        it
+            "MUST send STREAM_LIMIT_ERROR if a stream ID exceeds the limit [Transport 4.6]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated largeStreamId
             runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamLimitError]
         it
@@ -247,7 +248,7 @@ transportErrorSpec cc0 ms = do
             "MUST send missing_extension TLS alert if only the draft quic_transport_parameters extension (0xffa5) is included [TLS 8.2]"
             $ \_ -> do
                 let f [ExtensionRaw _ v] = [ExtensionRaw (ExtensionID 0xffa5) v]
-                    f _ = error "f"
+                    f xs = xs
                     cc = addHook cc0 $ setOnTLSExtensionCreated f
                 runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
         it
@@ -268,9 +269,8 @@ transportErrorSpec cc0 ms = do
                                     }
                         runCnoOp cc ms `shouldThrow` transportError
                 _ -> do
-                    putStrLn
-                        "Warning: 0-RTT is not possible. Skipping this test. Use \"h3spec -s 0-RTT\" next time."
                     when (ccDebugLog cc0) $ print mres
+                    pendingWith "0-RTT is not possible. Use \"h3spec -s 0-RTT\" next time."
 
 ----------------------------------------------------------------
 
