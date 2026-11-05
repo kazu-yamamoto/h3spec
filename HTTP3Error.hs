@@ -95,13 +95,13 @@ h3ErrorSpec qcc cconf ms served = do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated requestIllegalData
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3FrameUnexpected]
-        it "MUST send H3_MESSAGE_ERROR if a pseudo-header is duplicated [HTTP/3 4.1.1]" $ \_ -> do
+        it "MUST send H3_MESSAGE_ERROR if a pseudo-header is duplicated [HTTP/3 4.3.1]" $ \_ -> do
             let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader3
                 qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
             runC qcc' cconf conf ms
                 `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         it
-            "MUST send H3_MESSAGE_ERROR if mandatory pseudo-header fields are absent [HTTP/3 4.1.3]"
+            "MUST send H3_MESSAGE_ERROR if mandatory pseudo-header fields are absent [HTTP/3 4.3.1]"
             $ \x -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader0
                     qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
@@ -109,14 +109,14 @@ h3ErrorSpec qcc cconf ms served = do
                     runC qcc' cconf conf ms
                         `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         it
-            "MUST send H3_MESSAGE_ERROR if prohibited pseudo-header fields are present[HTTP/3 4.1.3]"
+            "MUST send H3_MESSAGE_ERROR if prohibited pseudo-header fields are present [HTTP/3 4.3]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader1
                     qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
                 runC qcc' cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         it
-            "MUST send H3_MESSAGE_ERROR if pseudo-header fields exist after fields [HTTP/3 4.1.3]"
+            "MUST send H3_MESSAGE_ERROR if pseudo-header fields exist after fields [HTTP/3 4.3]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader2
                     qcc' = addQUICHook qcc $ setOnResetStreamReceived $ \_strm aerr -> E.throwIO (ApplicationProtocolErrorIsReceived aerr "")
@@ -185,43 +185,43 @@ h3ErrorSpec qcc cconf ms served = do
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3SettingsError]
         it
-            "treats a repeated setting identifier as an error whatever its value [HTTP/3 7.2.4.1]"
+            "treats a repeated setting identifier as an error whatever its value [HTTP/3 7.2.4]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnControlFrameCreated duplicateLargeSetting
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3SettingsError]
         it
-            "MUST send H3_FRAME_UNEXPECTED if CANCEL_PUSH is received in a request stream [HTTP/3 7.2.5]"
+            "MUST send H3_FRAME_UNEXPECTED if CANCEL_PUSH is received in a request stream [HTTP/3 7.2.3]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated requestCancelPush
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3FrameUnexpected]
         it
-            "MUST send QPACK_DECOMPRESSION_FAILED if an invalid static table index exits in a field line representation [QPACK 3.1]"
+            "MUST send QPACK_DECOMPRESSION_FAILED if an invalid static table index exists in a field line representation [QPACK 3.1]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader4
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [QpackDecompressionFailed]
         it
-            "MUST send QPACK_DECOMPRESSION_FAILED if a field line references a dynamic table entry that is not there [QPACK 2.1.2]"
+            "MUST send QPACK_DECOMPRESSION_FAILED if a field line references a dynamic table entry that is not there [QPACK 2.2.3]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader5
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [QpackDecompressionFailed]
         it
-            "MUST NOT buffer a frame longer than SETTINGS_MAX_FIELD_SECTION_SIZE [HTTP/3 7.1]"
+            "MUST NOT buffer an over-long frame on a control stream [HTTP/3 7.1]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnControlStreamCreated overLongFrame
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3ExcessiveLoad]
         it
-            "MUST send QPACK_ENCODER_STREAM_ERROR if a new dynamic table capacity value exceeds the limit [QPACK 4.1.3]"
+            "MUST send QPACK_ENCODER_STREAM_ERROR if a new dynamic table capacity value exceeds the limit [QPACK 4.3.1]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnEncoderStreamCreated largeTableCapacity
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [QpackEncoderStreamError]
         it
-            "MUST send H3_CLOSED_CRITICAL_STREAM if a control stream is closed [QPACK 4.2]"
+            "MUST send H3_CLOSED_CRITICAL_STREAM if a control stream is closed [HTTP/3 6.2.1]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnControlStreamCreated closeStream
                 runC qcc cconf conf ms
