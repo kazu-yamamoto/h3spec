@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 
 module HTTP3Error (
     h3ErrorSpec,
@@ -29,6 +30,13 @@ import Test.Hspec
 
 type Millisecond = Int
 
+-- | Making a request, and then waiting for the connection error a test
+-- expects, for as long as the timeout allows.
+--
+-- It used to wait a tenth of a second after the response.  A server
+-- answering the request before it got round to the control stream, as one
+-- under load could, then had the connection closed under it, and the test
+-- failed for want of an error it was about to send.
 runC
     :: ClientConfig -> H3.ClientConfig -> H3.Config -> Millisecond -> IO (Maybe ())
 runC = runCReq $ H3.requestNoBody methodGet "/" []
@@ -41,7 +49,31 @@ runCReq
     -> H3.Config
     -> Millisecond
     -> IO (Maybe ())
-runCReq req qcc cconf conf ms = timeout us $ run qcc $ \conn -> do
+runCReq = runCWith True
+
+-- | Like 'runCReq', for a test that expects no error: done a tenth of a
+-- second after the response.
+runCReqOk
+    :: H3.Request
+    -> ClientConfig
+    -> H3.ClientConfig
+    -> H3.Config
+    -> Millisecond
+    -> IO (Maybe ())
+runCReqOk = runCWith False
+
+-- | With 'True', a test that expects a connection error: a reset of the
+-- request does not end it, since a server closing the connection may reset
+-- its streams first.
+runCWith
+    :: Bool
+    -> H3.Request
+    -> ClientConfig
+    -> H3.ClientConfig
+    -> H3.Config
+    -> Millisecond
+    -> IO (Maybe ())
+runCWith expectError req qcc cconf conf ms = timeout us $ run qcc $ \conn -> do
     info <- getConnectionInfo conn
     case alpn info of
         Just proto | "hq" `BS.isPrefixOf` proto -> do
@@ -51,10 +83,14 @@ runCReq req qcc cconf conf ms = timeout us $ run qcc $ \conn -> do
   where
     us = ms * 1000
     client :: H3.Client ()
-    client sendRequest _aux = do
-        ret <- sendRequest req $ \_rsp -> return ()
-        threadDelay 100000
-        return ret
+    client sendRequest _aux
+        | expectError = do
+            _ <- E.try @StreamResetIsReceived $ sendRequest req $ \_rsp -> return ()
+            threadDelay us
+        | otherwise = do
+            ret <- sendRequest req $ \_rsp -> return ()
+            threadDelay 100000
+            return ret
 
 -- | Thrown when hq is negotiated instead of h3, so that the test is
 -- reported as pending rather than passing on a generic error code.
@@ -92,11 +128,12 @@ h3ErrorSpec qcc cconf ms served = do
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3FrameUnexpected]
         itH3
-            "MUST send H3_MESSAGE_ERROR if a pseudo-header is duplicated [HTTP/3 4.3.1]" $ \_ -> do
-            let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader3
-                qcc' = throwOnReset qcc
-            runC qcc' cconf conf ms
-                `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
+            "MUST send H3_MESSAGE_ERROR if a pseudo-header is duplicated [HTTP/3 4.3.1]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader3
+                    qcc' = throwOnReset qcc
+                runC qcc' cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         itH3
             "MUST send H3_MESSAGE_ERROR if mandatory pseudo-header fields are absent [HTTP/3 4.3.1]"
             $ \x -> do
@@ -133,7 +170,7 @@ h3ErrorSpec qcc cconf ms served = do
                             `shouldThrow` applicationProtocolErrorsIn [H3MessageError]
         itH3 "MUST accept TE with trailers [HTTP/3 4.2]" $ \_ -> do
             let req = H3.requestNoBody methodGet "/" [("te", "trailers")]
-            runCReq req qcc cconf conf0 ms `shouldReturn` Just ()
+            runCReqOk req qcc cconf conf0 ms `shouldReturn` Just ()
         itH3
             "MUST send H3_MISSING_SETTINGS if the first control frame is not SETTINGS [HTTP/3 6.2.1]"
             $ \_ -> do
@@ -194,6 +231,42 @@ h3ErrorSpec qcc cconf ms served = do
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [H3FrameUnexpected]
         itH3
+            "MUST send H3_FRAME_UNEXPECTED if PUSH_PROMISE is received [HTTP/3 7.2.5]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnHeadersFrameCreated requestPushPromise
+                runC qcc cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [H3FrameUnexpected]
+        itH3
+            "MUST send H3_ID_ERROR if CANCEL_PUSH names a push ID not allowed [HTTP/3 7.2.3]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnControlFrameCreated cancelPushNotAllowed
+                runC qcc cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [H3IdError]
+        itH3
+            "MUST send H3_ID_ERROR if MAX_PUSH_ID goes down [HTTP/3 7.2.7]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnControlFrameCreated maxPushIdDown
+                runC qcc cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [H3IdError]
+        itH3
+            "MUST send H3_ID_ERROR if GOAWAY goes up [HTTP/3 5.2]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnControlFrameCreated goawayUp
+                runC qcc cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [H3IdError]
+        itH3
+            "MUST send H3_FRAME_ERROR if MAX_PUSH_ID has octets after its push ID [HTTP/3 7.1]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnControlFrameCreated maxPushIdTrailing
+                runC qcc cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [H3FrameError]
+        itH3
+            "MUST ignore a frame of unknown type, however long [HTTP/3 7.2.8]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnControlFrameCreated longUnknownFrame
+                runCReqOk (H3.requestNoBody methodGet "/" []) qcc cconf conf ms
+                    `shouldReturn` Just ()
+        itH3
             "MUST send QPACK_DECOMPRESSION_FAILED if an invalid static table index exists in a field line representation [QPACK 3.1]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader4
@@ -203,6 +276,18 @@ h3ErrorSpec qcc cconf ms served = do
             "MUST send QPACK_DECOMPRESSION_FAILED if a field line references a dynamic table entry that is not there [QPACK 2.2.3]"
             $ \_ -> do
                 let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader5
+                runC qcc cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [QpackDecompressionFailed]
+        itH3
+            "MUST send QPACK_DECOMPRESSION_FAILED if a field line is cut short [QPACK 2.2.3]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader6
+                runC qcc cconf conf ms
+                    `shouldThrow` applicationProtocolErrorsIn [QpackDecompressionFailed]
+        itH3
+            "MUST send QPACK_DECOMPRESSION_FAILED if a Huffman string is badly padded [QPACK 4.1.2]"
+            $ \_ -> do
+                let conf = addHook conf0 $ setOnHeadersFrameCreated illegalHeader7
                 runC qcc cconf conf ms
                     `shouldThrow` applicationProtocolErrorsIn [QpackDecompressionFailed]
         itH3
@@ -389,6 +474,32 @@ controlHeaders fs = fs ++ [H3Frame H3FrameHeaders ""]
 requestCancelPush :: [H3Frame] -> [H3Frame]
 requestCancelPush fs = H3Frame H3FrameCancelPush "" : fs
 
+-- PUSH_PROMISE, push ID 0, and no field section to speak of.  Before
+-- HEADERS, since a server need not read what comes after them.
+requestPushPromise :: [H3Frame] -> [H3Frame]
+requestPushPromise fs = H3Frame H3FramePushPromise "\x00" : fs
+
+-- CANCEL_PUSH for push ID 0, with no MAX_PUSH_ID sent: no push is allowed.
+cancelPushNotAllowed :: [H3Frame] -> [H3Frame]
+cancelPushNotAllowed fs = fs ++ [H3Frame H3FrameCancelPush "\x00"]
+
+-- MAX_PUSH_ID 5, then 3.
+maxPushIdDown :: [H3Frame] -> [H3Frame]
+maxPushIdDown fs = fs ++ [H3Frame H3FrameMaxPushId "\x05", H3Frame H3FrameMaxPushId "\x03"]
+
+-- GOAWAY 0, then 4.
+goawayUp :: [H3Frame] -> [H3Frame]
+goawayUp fs = fs ++ [H3Frame H3FrameGoaway "\x00", H3Frame H3FrameGoaway "\x04"]
+
+-- MAX_PUSH_ID 5, and an octet more.
+maxPushIdTrailing :: [H3Frame] -> [H3Frame]
+maxPushIdTrailing fs = fs ++ [H3Frame H3FrameMaxPushId "\x05\x00"]
+
+-- A reserved type (0x21), with a payload longer than
+-- SETTINGS_MAX_FIELD_SECTION_SIZE.
+longUnknownFrame :: [H3Frame] -> [H3Frame]
+longUnknownFrame fs = fs ++ [H3Frame (H3FrameUnknown 0x21) (BS.replicate 40000 0)]
+
 requestIllegalData :: [H3Frame] -> [H3Frame]
 requestIllegalData fs = H3Frame H3FrameData "" : fs
 
@@ -461,6 +572,34 @@ illegalHeader5 _ =
     [ H3Frame
         H3FrameHeaders
         "\x00\x00\xd1\xd7\x50\x09\x31\x32\x37\x2e\x30\x2e\x30\x2e\x31\xc1\x80"
+    ]
+
+-- [(":method","GET")
+-- ,(":scheme","https")
+-- ,(":authority","127.0.0.1")
+-- ,(":path","/")] ++ age with a value of five octets, of which two are there
+--
+-- Running off the end of the section raised BufferOverrun, which the server
+-- answered with a stream reset of H3_MESSAGE_ERROR.
+illegalHeader6 :: [H3Frame] -> [H3Frame]
+illegalHeader6 _ =
+    [ H3Frame
+        H3FrameHeaders
+        "\x00\x00\xd1\xd7\x50\x09\x31\x32\x37\x2e\x30\x2e\x30\x2e\x31\xc1\x52\x05ab"
+    ]
+
+-- [(":method","GET")
+-- ,(":scheme","https")
+-- ,(":authority","127.0.0.1")
+-- ,(":path","/")] ++ age with a one-octet Huffman value of 0x00
+--
+-- The three bits left over are padding, which must be the start of EOS:
+-- ones (RFC 7541, section 5.2).
+illegalHeader7 :: [H3Frame] -> [H3Frame]
+illegalHeader7 _ =
+    [ H3Frame
+        H3FrameHeaders
+        "\x00\x00\xd1\xd7\x50\x09\x31\x32\x37\x2e\x30\x2e\x30\x2e\x31\xc1\x52\x81\x00"
     ]
 
 {-
