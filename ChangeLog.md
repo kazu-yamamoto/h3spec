@@ -1,5 +1,22 @@
 # Revision history for h3spec
 
+## 0.1.15
+
+These changes were made on main without PRs.
+
+* Using `http3` v0.1.10 and `quic` v0.3.20.
+* 9 new test cases, 86 in all. HTTP/3 and QPACK: H3_MESSAGE_ERROR for a
+  duplicated pseudo-header; H3_FRAME_UNEXPECTED for PUSH_PROMISE;
+  H3_ID_ERROR for a CANCEL_PUSH push ID not allowed, a MAX_PUSH_ID going
+  down and a GOAWAY going up; H3_FRAME_ERROR for octets after MAX_PUSH_ID's
+  push ID; a frame of unknown type ignored however long;
+  QPACK_DECOMPRESSION_FAILED for a field line cut short and for a badly
+  padded Huffman string.
+* Test names and RFC section references corrected.
+* `-m` works together with `-s`; an invalid `--timeout` is refused.
+* HTTP/3 cases are pending on an HQ connection, and the 0-RTT case is
+  pending against a server that does not accept 0-RTT.
+
 ## 0.1.14
 
 * Using `http3` v0.1.7 and `quic` v0.3.13.
