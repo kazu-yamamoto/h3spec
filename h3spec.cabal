@@ -28,5 +28,5 @@ executable h3spec
                       , http-types
                       , http3 >= 0.1.10 && < 0.2
                       , quic >= 0.3.20 && < 0.4
-                      , tls >= 2.3 && < 2.6
+                      , tls >= 2.3 && < 2.7
   default-extensions:   Strict StrictData
